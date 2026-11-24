@@ -1,0 +1,183 @@
+HYBRID SERVER LAUNCHER
+Proxy ve coklu oyun sunucusu yonetimi
+====================================
+
+Hybrid Server Launcher; bir Minecraft proxy'sini ve ona bagli lobby ile
+istege bagli ek oyun sunucularini tek bir baslatma komutuyla calistirmak
+icin tasarlanmis hafif bir Java launcher'idir.
+
+Ilk kurulumda yalnizca proxy ve lobby etkin olur. Skyblock, survival veya
+benzeri ek sunuculari kullanmak isteyen operatorler bu sunuculari ayarlara
+ekleyebilir. Her backend kendi portunda, kendi calisma klasorunde ve ayri bir
+Java surecinde calisir.
+
+
+NE IS YAPAR?
+------------
+
+• Proxy ve backend sunucularini sirayla baslatir.
+• Backend'lerin proxy arkasinda 127.0.0.1 adresinde dinlemesini ayarlar.
+• Lobby ve ek game server'lar icin proxy backend adreslerini olusturur.
+• Her backend icin ayri sunucu yazilimi, JAR dosyasi, port, Java komutu ve
+  maksimum heap/RAM ayari kullanilmasini saglar.
+• `launch-args=auto` ile standart JAR, Fabric, Forge ve NeoForge icin uygun
+  baslatma profilini bulur; Forge/NeoForge installer verilirse server
+  kurulum adimini otomatik calistirir.
+• Proxy ve tum backend loglarini launcher konsoluna aktarir.
+• Konsoldaki normal komutlari lobby dahil butun game server'lara gonderir.
+• `psw <ad> <komut>` ile komutu yalnizca adiyla belirtilen game server'a
+  gonderir.
+• Proxy surecine konsol komutu gondermez.
+• JAR, Java runtime, EULA, port ve forwarding ayarlarinda temel kontroller
+  yapar; sorun bulursa baslangic loguna hata yazar.
+• Velocity arkasindaki Fabric, Forge ve NeoForge backend'ler icin tam
+  surumle uyumlu forwarding modunu ve secret ayarini otomatik kurar.
+
+
+DESTEKLENEN SUNUCU TURleri
+-------------------------
+
+Proxy:
+  • Velocity
+  • BungeeCord
+  • Waterfall
+
+Lobby ve ek game/plugin server:
+  • Paper
+  • Purpur
+  • Spigot
+  • Folia
+  • Pufferfish
+  • Leaf
+  • Leaves
+  • Fabric
+  • Forge
+  • NeoForge
+  • Arclight
+  • Mohist
+  • Limbo (bagimsiz TCP backend)
+
+Lobby ve ek sunucular ayni yazilim turunu kullanabilir veya farkli turlerde
+olabilir. Ornegin:
+  • Velocity + Paper lobby + Paper Skyblock
+  • BungeeCord + Paper lobby + Folia Survival
+
+Yazilim turu secmek launcher'in o yazilim icin bir JAR indirdigi ya da her
+surumle uyumlulugu garanti ettigi anlamina gelmez. Operator uygun JAR
+dosyalarini saglar.
+
+
+ISTEGE BAGLI COKLU GAME SERVER
+------------------------------
+
+Ek sunucular varsayilan olarak kapali gelir. `plugin-servers` ayarina isim
+ekleyerek istediginiz backend'leri etkinlestirirsiniz. Her birinin ayarlari
+`plugin.<ad>.*` anahtarlariyla ayri belirlenir.
+
+Ornek:
+  plugin-servers=skyblock,survival
+  plugin.skyblock.type=paper
+  plugin.skyblock.jar=server-libs/skyblock.jar
+  plugin.skyblock.port=25568
+  plugin.skyblock.memory=700M
+  plugin.survival.type=folia
+  plugin.survival.jar=server-libs/survival.jar
+  plugin.survival.port=25569
+  plugin.survival.memory=900M
+
+Her backend icin ayri:
+  • Yazilim turu
+  • JAR yolu
+  • Dahili port
+  • Maksimum Java heap limiti
+  • Java executable ayarlanabilir.
+  • Forge/NeoForge gibi kurulumlar icin ozel Java argumanlari
+    (`plugin.<ad>.launch-args`) verilebilir.
+
+Her ek sunucu `run/<ad>/` klasorunde calisir. Plugin JAR'lari `plugins/<ad>/`
+klasorunden ilgili backend'e kopyalanir. Lobby plugin'leri `plugins/lobby/`,
+proxy plugin'leri `plugins/proxy/` klasorune konur.
+
+Port ayari verilmezse ek backend'lere lobby portundan baslayarak siradaki
+portlar atanir. Ornegin lobby 25567 ise ilk ek sunucu 25568'i kullanir.
+Proxy, lobby ve diger backend portlari cakismamalidir.
+
+
+KOMUT KULLANIMI
+---------------
+
+Tum aktif game server'lara komut gondermek icin komutu normal yazin:
+  say Bakim basliyor
+  save-all
+
+Tek bir backend'e komut gondermek icin:
+  psw skyblock say Skyblock oyuncularina mesaj
+  psw lobby list
+  psw survival save-all
+
+Normal komut lobby ve plugin-servers listesinde etkin olan tum ek sunuculara
+gider. `psw` komutu yalnizca secilen sunucuya gider. Proxy loglari konsolda
+gorunur, ancak proxy komut alicisi degildir.
+
+
+JAVA VE SUNUCU SURUMLERI
+-----------------------
+
+Launcher Java 25 ile derlenmistir ve hostta Java 25 veya daha yeni bir
+runtime ile calistirilmalidir. Proxy/backend Java komutlari ayri secilir;
+Java 8 veya ustu runtime kabul edilir, ancak her yazilim surumunun kendi
+Java gereksinimi kontrol edilmelidir.
+
+Operator 1.8 ile 26.3 araliginda uygun sunucu surumunu ve JAR/build'i
+secebilir. Launcher JAR indirmez veya bu araliktaki her sunucu build'inin
+Java 25 ile calisacagini garanti etmez. Secilen yazilimin tam build'i icin
+resmi Java ve Minecraft uyumluluk kosullarini kontrol edin. Java 26 ya da
+daha yenisini isteyen bir build Java 25 hostta calismayabilir.
+
+Modded backend'ler proxy forwarding icin uyumlu mod/plugin gerektirebilir.
+Fabric/Forge/NeoForge icin otomatik kurulum yalnizca ilgili forwarding
+modunun yayinladigi surumlerde calisir ve Velocity modern forwarding gerektirir.
+Forge/NeoForge kurulumlarinda loader'in args dosyalarina ozel launch argumani
+gerekebilir. Limbo burada bagimsiz TCP backend olarak ele alinir; Velocity
+plugin dagitimlari `plugins/proxy/` altina konur.
+
+
+RAM VE KAYNAK KULLANIMI
+----------------------
+
+Her proxy/backend ayri bir JVM'dir. `proxy.memory`, `lobby.memory` ve
+`plugin.<ad>.memory` ilgili prosesin maksimum Java heap degerini (`-Xmx`)
+belirler. Launcher su anda her proses icin `-Xms256M` kullanir.
+
+Launcher host RAM'ini otomatik paylastirmaz ve ek sunucu sayisini bellek
+kapasitesine gore sinirlamaz. Bellek yetersizliginde JVM veya hosting
+container'i prosesleri durdurabilir. Heap disi Java kullanimi ve diger
+sistem prosesleri icin de RAM gerekir; degerleri host kapasitesi ve gercek
+yuk testlerine gore ayarlayin.
+
+
+NELER YAPMAZ?
+-------------
+
+• Proxy veya oyun sunucusu JAR'larini otomatik indirmez/guncellemez.
+• Her Minecraft/server build'inin secilen Java runtime'i ile uyumlu oldugunu
+  garanti etmez.
+• RAM'i backend'ler arasinda otomatik hesaplayip dagitmaz.
+• Oyun plugin'lerini indirmez veya plugin uyumlulugunu dogrulamaz.
+• Oyunculari otomatik olarak lobby'den oyun modlarina dagitmaz; bunun icin
+  proxy komutlari, uygun proxy plugin'i veya oyun icindeki bir transfer
+  sistemi yapilandirilmalidir.
+• Tum plugin ayarlarini, izinleri, queue'lari veya oyun modlarini yonetmez.
+
+
+KIMLER ICIN?
+------------
+
+Tek bir hosting surecinden proxy + lobby baslatmak ve ihtiyac halinde ayni
+kurulumda birden cok bagimsiz backend calistirmak isteyen Minecraft
+operatorleri icin uygundur. Sunucularin yazilim turu, JAR yolu, port ve
+heap limitini tek bir `config/hybrid.properties` dosyasinda duzenlemek
+isteyenler icin sade bir baslangic/yonetim katmani sunar.
+
+Kurulum, tam config ornekleri, EULA, forwarding, port, plugin, RAM ve hata
+cozum adimlari icin `KULLANIM_KILAVUZU.txt` dosyasina bakin.

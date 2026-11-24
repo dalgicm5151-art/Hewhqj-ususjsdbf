@@ -1,0 +1,666 @@
+HYBRID SERVER LAUNCHER - DETAILED USER GUIDE
+============================================
+
+This guide covers launcher installation, the Java 25 requirement, proxy and
+lobby configuration, optional multiple game/plugin servers (PSWs), RAM and
+port settings, console commands, and common troubleshooting steps.
+
+
+1. WHAT THE LAUNCHER DOES
+-------------------------
+
+The launcher starts one proxy and at least one backend game server. On a
+first-time setup, only the proxy and lobby are enabled. Additional game/plugin
+servers are disabled by default; add their names to plugin-servers in
+hybrid.properties to enable them.
+
+Supported proxy types:
+  - Velocity
+  - BungeeCord
+  - Waterfall
+
+Supported lobby and additional game server types:
+  - Paper
+  - Purpur
+  - Spigot
+  - Folia
+  - Pufferfish
+  - Leaf
+  - Leaves
+  - Fabric
+  - Forge
+  - NeoForge
+  - Arclight
+  - Mohist
+  - Limbo (as a standalone TCP backend)
+
+Each backend can use the same software or a different type. For example, the
+lobby can use Paper, skyblock can use Paper, and survival can use Folia. Each
+backend runs in its own JVM process and its own run/<server-name>/ directory.
+
+The launcher does not download server software. The operator supplies the
+proxy and game server JARs in server-libs/ and configures their paths. The
+launcher creates basic proxy/backend connection settings; player transfers,
+permissions, game modes, and other gameplay behavior must be configured
+separately using suitable proxy plugins or server plugins.
+
+
+2. JAVA 25 REQUIREMENT AND VERSION COMPATIBILITY
+------------------------------------------------
+
+The launcher is compiled with Java 25. The host/container running the launcher
+must provide Java 25 or a newer Java runtime. Proxy and backend Java commands
+are configured separately; the launcher checks that each command runs Java 8
+or newer. The exact server build may require an older or newer runtime, so
+select a compatible executable for each process using proxy.java, lobby.java,
+or plugin.<name>.java.
+
+Installing/selecting a Java 25 runtime:
+  1. Select or install Java 25 runtime/JDK in the hosting panel or operating
+     system. If the panel offers a Java version selector, choose Java 25.
+  2. Run this command in the terminal:
+       java -version
+  3. The output should show major version 25 or newer.
+  4. The panel startup command for the launcher should look like:
+       java -jar server.jar
+
+Building the launcher from source requires JDK 25 and Maven 3.9 or newer.
+Maven is not required on the host when running the prebuilt server.jar. The
+Java used by the launcher does not have to be the same executable used by
+the proxy/backends; proxy.java, lobby.java, or plugin.<name>.java can specify
+a separate Java executable path for each process. For example, the launcher
+can run on Java 25 while an older Forge backend uses a Java 8 runtime.
+
+Backend automatic Java fallback:
+  The launcher first starts a lobby/plugin server with its configured Java.
+  If it exits before opening its listener and its output matches a recognized
+  Java compatibility signature (Paper's maximum-supported-Java message,
+  "Unsupported class file major version", or the known old-Forge
+  sun.security.util access error), the launcher downloads an Eclipse Temurin
+  JRE over HTTPS, verifies Adoptium's SHA-256 checksum, stores it under
+  runtimes/, and retries once. Java 25 bytecode incompatibility selects Java
+  21; Paper's "up to Java 15" message selects Java 11. For the specific old
+  Forge ManifestEntryVerifier method-signature error, Java 8, 11, and 17 use
+  known earlier patches of the same Java feature (8u312, 11.0.13, and 17.0.1).
+  Module-access failures, and this signature error on other feature versions,
+  fall back to Java 8u312 for the affected legacy Forge. These are targeted
+  rules for recognized errors, not a guarantee of detecting or fixing every
+  Java patch regression. Other crashes do not trigger a download or retry.
+  Proxy and installer startup failures are not automatically retried. The
+  downloaded JRE does not modify PATH or JAVA_HOME.
+
+Important notes about Minecraft/server versions:
+  - Minecraft server versions in the 1.8 through 26.3 range can be selected
+    by the operator. This does not mean every build in that range has been
+    tested or is compatible.
+  - The launcher does not download or restrict Minecraft versions and does
+    not verify JAR compatibility. The JAR placed in server-libs is the build
+    supplied by the operator.
+  - "The launcher runs on JDK 25" does not mean every Paper/Purpur/Spigot/
+    Folia/Pufferfish/modded/proxy build in that range is guaranteed to run
+    on Java 25. Check the official Java requirement for the exact build.
+  - If a selected server requires Java 26 or newer, Java 25 may not be
+    sufficient. The host must provide that Java version, and the server's
+    .java setting must select that runtime.
+  - The proxy and backends must support compatible Minecraft protocols/
+    versions. Supporting different client Minecraft versions may require an
+    appropriate compatibility plugin on the proxy.
+
+
+3. FILE AND DIRECTORY LAYOUT
+----------------------------
+
+On the first run, the launcher creates the basic files and directories in
+its working directory:
+
+  server.jar                    Launcher JAR (started by the hosting panel)
+  config/hybrid.properties      Main configuration file
+  server-libs/                  Operator-supplied proxy/backend JARs
+  run/proxy/                    Proxy config, plugins, and runtime files
+  run/lobby/                    Lobby config, plugins, and runtime files
+  plugins/proxy/                Proxy plugin JARs
+  plugins/lobby/                Lobby plugin JARs
+
+When "skyblock" is added to plugin-servers:
+  run/skyblock/                 Skyblock's separate config, worlds, and logs
+  plugins/skyblock/             Plugin JARs copied to Skyblock
+
+Replace <name> with the name configured in hybrid.properties for each
+additional server. For example: plugins/survival/ and run/survival/.
+
+Server JAR files are copied into each server's working directory:
+  Proxy:        run/proxy/proxy.jar
+  Lobby:        run/lobby/server.jar
+  Additional:   run/<name>/server.jar
+
+Do not delete server.properties, worlds, logs, or other generated server
+files from the runtime directories; they contain persistent server data.
+
+
+4. FIRST-TIME SETUP
+-------------------
+
+1. Upload the server files to the host's working directory. If the launcher
+   file is not named server.jar, adjust the panel startup command accordingly.
+2. Upload the proxy JAR and lobby server files/installer into server-libs/.
+   The default launch-args=auto selects a launch profile for the software.
+   If a Forge/NeoForge server installer JAR is supplied, the launcher runs
+   its --installServer step and then detects the generated server profile.
+3. Run java -jar server.jar for the first time. The launcher creates
+   config/hybrid.properties, run/proxy, run/lobby, and the lobby EULA file.
+   If JARs are missing, it stops and prints the expected file paths.
+4. Review the settings in config/hybrid.properties.
+5. Read Mojang's EULA. If you accept it, change eula=false to eula=true in
+   run/lobby/eula.txt.
+6. Restart. The lobby/proxy configurations are prepared, JARs are copied,
+   and the launcher starts the lobby first, then the proxy.
+
+The launcher does not accept the EULA for you. Every enabled vanilla/modded
+game server needs its own EULA file. After adding an extra server, start
+once to create run/<name>/eula.txt, accept the EULA there, and start again.
+The Limbo type skips the EULA check.
+
+
+5. PROXY AND LOBBY SETTINGS
+---------------------------
+
+Example of the basic settings created on first startup:
+
+  proxy.type=velocity
+  proxy.jar=server-libs/velocity.jar
+  proxy.bind=0.0.0.0:25565
+  proxy.memory=1G
+  proxy.java=java
+  proxy.online-mode=true
+
+  lobby.type=paper
+  lobby.jar=server-libs/paper.jar
+  lobby.port=25566
+  lobby.memory=4G
+  lobby.java=java
+  lobby.launch-args=auto
+
+  plugin-servers=
+
+Settings:
+
+proxy.type
+  Proxy software: velocity, bungeecord, or waterfall.
+
+proxy.jar
+  Path to the proxy JAR under server-libs/. Example:
+  server-libs/velocity.jar
+
+proxy.bind
+  Public IP/port address for players. Usually 0.0.0.0:25565. It must use
+  the public port assigned by the hosting panel.
+
+proxy.memory
+  Maximum Java heap (Xmx) for the proxy JVM. Examples: 512M, 1G.
+
+proxy.java
+  Java executable/command for the proxy. Example: java.
+
+proxy.online-mode
+  Minecraft account authentication setting. Defaults to true. Keep it
+  consistent with the proxy/backend forwarding configuration.
+
+proxy.velocity-forwarding-mode
+  Velocity mode: auto, modern, legacy, or none. Auto chooses modern for
+  Fabric/Forge/NeoForge and legacy for Spigot. Otherwise it preserves a
+  valid mode from an existing velocity.toml, or uses modern for a new config.
+  Arclight and Mohist are not automatically forced to legacy; select the
+  desired mode here or in velocity.toml. Other Velocity TOML settings are
+  preserved.
+  Legacy mode sets run/lobby/spigot.yml settings.bungeecord to true and
+  disables native Velocity forwarding in Arclight and Mohist. Modern mode
+  enables Arclight forwarding in arclight.conf and Mohist forwarding in
+  mohist-config/mohist.yml (`velocity.enabled`, `velocity.onlineMode`, and
+  `velocity.secret`), synchronizing the shared secret.
+
+lobby.type
+  A supported backend type: paper, purpur, spigot, folia, pufferfish, leaf,
+  leaves, fabric, forge, neoforge, arclight, mohist, or limbo.
+
+lobby.jar
+  Path to the lobby JAR under server-libs/.
+
+lobby.port
+  Private backend port used by the lobby behind the proxy. The lobby binds
+  to 127.0.0.1. Do not expose this as a public player port.
+
+lobby.minecraft-version
+  Exact Minecraft version used to select an automatic forwarding mod for a
+  Fabric/Forge/NeoForge lobby behind Velocity. The launcher tries to detect it
+  from the JAR filename/metadata; set it explicitly if it cannot be detected.
+
+lobby.libs
+  Optional Forge/NeoForge libraries ZIP. It is extracted to
+  run/lobby/libraries/ if the installer cannot create or repair required
+  files. Use an archive matching the exact Forge/NeoForge build and Minecraft
+  version. ZIP paths may start with libraries/ or contain library paths
+  directly. JAR files in the archive must have valid ZIP/JAR structure;
+  corrupt or truncated JARs are reported before launch. Example:
+  lobby.libs=libs/forge-1.21.1-libraries.zip
+
+lobby.memory
+  Maximum Java heap for the lobby JVM.
+
+lobby.java
+  Installed Java executable/command for the lobby. Use `java` if it is on
+  PATH, or the actual executable path supplied by the host. Do not copy an
+  example placeholder path literally. If the host provides only Java 25,
+  older Forge backends requiring Java 8 need a Java 8 runtime provided or
+  enabled by the host.
+
+lobby.launch-args
+  Arguments passed to the lobby JVM after Java memory options. Default: auto.
+  The launcher detects standard server JARs, Fabric server launchers, or
+  generated Forge/NeoForge argument files. If a Forge/NeoForge installer JAR
+  is supplied and no installed profile exists, it runs --installServer once.
+  The selected automatic profile is printed before startup. Explicit Java
+  arguments can also be supplied; they are not run as a shell command.
+
+The configuration uses Java Properties format: key=value. Do not write the
+same key more than once; do not rely on which duplicate value will be used.
+Restart the launcher after changing settings.
+
+
+6. ADDING MULTIPLE PLUGIN/GAME SERVERS (PSWs)
+---------------------------------------------
+
+PSW means an additional game server. Extra servers are optional; if
+plugin-servers is empty, only the lobby and proxy run.
+
+Example: lobby on 25567, skyblock on 25568, survival on 25569:
+
+  lobby.port=25567
+  plugin-servers=skyblock,survival
+
+  plugin.skyblock.type=paper
+  plugin.skyblock.jar=server-libs/skyblock-paper.jar
+  plugin.skyblock.port=25568
+  plugin.skyblock.memory=700M
+  plugin.skyblock.java=java
+
+  plugin.survival.type=folia
+  plugin.survival.jar=server-libs/survival-folia.jar
+  plugin.survival.port=25569
+  plugin.survival.memory=700M
+  plugin.survival.java=java
+
+For each additional server:
+  plugin-servers
+    Comma-separated names of enabled servers. Example:
+    plugin-servers=skyblock,survival
+
+  plugin.<name>.type
+    paper, purpur, spigot, folia, pufferfish, leaf, leaves, fabric, forge,
+    neoforge, arclight, mohist, or limbo.
+
+  plugin.<name>.jar
+    Path to the server JAR under server-libs/. If omitted, the default is:
+    server-libs/<name>.jar
+
+  plugin.<name>.port
+    Optional backend port. If omitted, ports are assigned sequentially
+    starting after the lobby port. If the lobby uses 25567, the first extra
+    server uses 25568. Each following server uses the next port.
+
+  plugin.<name>.memory
+    Maximum heap for that server JVM. Defaults to 2G if omitted.
+
+  plugin.<name>.java
+    Java executable for that server. Defaults to lobby.java if omitted.
+
+  plugin.<name>.launch-args
+    Java launch arguments for that server. Defaults to auto, which selects a
+    detected server profile for the configured software. Forge/NeoForge
+    installer JARs are run with --installServer when needed; the generated
+    profile is then detected. Explicit arguments can override auto.
+
+  plugin.<name>.minecraft-version
+    Exact Minecraft version for automatically selecting a forwarding mod
+    when this server uses Fabric, Forge, or NeoForge behind Velocity. Set it
+    if the launcher cannot detect the version from the JAR.
+
+  plugin.<name>.libs
+    Optional matching Forge/NeoForge libraries ZIP. Extracted under
+    run/<name>/libraries/. Example:
+    plugin.forge.libs=libs/forge-1.21.1-libraries.zip
+
+Set `lobby.jar=none` or `plugin.<name>.jar=none` when the server is already
+installed in its `run/<name>/` directory. With launch-args=auto, the launcher
+searches that directory for the software's known launch profile.
+
+Names may contain lowercase letters, numbers, hyphens (-), and underscores
+(_); "lobby" and "proxy" cannot be used as extra server names. Duplicate
+names or ports are not allowed. Backend ports must also differ from the
+proxy port.
+
+Add the desired names to plugin-servers, place each JAR in server-libs/ (or
+use a custom launch profile), and add the settings. Then start the launcher.
+The new run/<name>/ directory and, except for Limbo, an EULA file are
+created. If an EULA applies, accept it and restart.
+
+Proxy backend entries are created/updated at startup:
+  Velocity:              run/proxy/velocity.toml
+  BungeeCord/Waterfall:  run/proxy/config.yml
+
+The launcher adds backend names to these configurations. The default player
+entry point is the lobby. To send players to skyblock/survival, configure
+the proxy's server-switch commands/permissions or install a suitable proxy
+plugin/portal system. The launcher does not itself distribute players,
+provide a queue, or select a game mode automatically.
+
+Modded backends such as Fabric/Forge/NeoForge need a compatible forwarding
+mod/plugin configured to match the proxy mode. The launcher does not download
+or configure that mod/plugin. Leaf/Leaves receive Paper-family config.
+Arclight and Mohist receive forwarding settings in their native config files
+as well as the Spigot-compatible Bungee toggle.
+
+Limbo is launched here as a standalone TCP backend. For the LOOHP Limbo
+server, the launcher manages `run/<name>/server.properties`: it sets
+`server-ip=127.0.0.1` and the assigned `server-port`, then selects
+`bungeecord=true` for BungeeCord/Waterfall or Velocity legacy mode. Velocity
+modern mode instead sets `velocity-modern=true` and writes the shared secret
+to `forwarding-secrets`; Velocity none mode disables both forwarding options.
+`bungee-guard` is disabled because it is mutually exclusive with these modes.
+Other Limbo settings are preserved. A Limbo proxy plugin belongs in
+`plugins/proxy/`; do not select `type=limbo` for a proxy plugin.
+
+
+7. INSTALLING PLUGINS
+---------------------
+
+Proxy plugins:
+  plugins/proxy/*.jar
+  Copied to run/proxy/plugins/ at startup.
+
+Lobby plugins:
+  plugins/lobby/*.jar
+  Copied to run/lobby/plugins/ at startup.
+
+Additional server plugins:
+  plugins/<name>/*.jar
+  Copied to run/<name>/plugins/ at startup.
+
+Use plugin versions compatible with the relevant proxy/server software and
+Minecraft version. The launcher does not download plugins or check plugin
+compatibility. Do not place the same plugin JAR on both the proxy and a Paper
+backend unless that plugin explicitly supports both environments.
+
+
+8. RAM AND MEMORY PLANNING
+--------------------------
+
+Each proxy/backend runs as a separate Java process/JVM. The memory setting
+in hybrid.properties is that JVM's maximum Java heap (Xmx). For example,
+lobby.memory=1G means Xmx1G for the lobby.
+
+The launcher currently starts every proxy and backend with a fixed
+-Xms256M. This cannot be configured in hybrid.properties. Do not set memory
+below 256M; if Xmx is less than Xms, the JVM cannot start.
+
+Xmx does not mean all of that memory is reserved immediately. The JVM grows
+the heap as needed. However, if concurrently running servers exceed the
+host/container memory limit, the system may kill processes due to OOM.
+Non-heap memory (native/JIT/threads/buffers), the proxy, launcher, and
+operating system/container also use RAM.
+
+Example defaults:
+  Proxy:            1G
+  Lobby:            4G
+  Each extra PSW:   2G
+
+These are not suitable assumptions for a 2 GB host. Adding servers and
+summing their Xmx values does not automatically allocate or balance RAM.
+The launcher does not measure host RAM, distribute per-server limits
+automatically, or delay starting PSWs when memory is low. You can define as
+many servers as you want, but the number that can actually run at once is
+limited by their real memory needs and host capacity.
+
+Do not assume that ten Paper servers can run on a 2.5 GB host. The minimum
+heap needs vary by server; too little Xmx may prevent startup, cause memory
+errors, or lead to the host killing a process. Adjust Xmx values based on
+testing, player/plugin/load levels, and the hosting memory graph. Leave
+headroom instead of assigning all host RAM to Java heaps.
+
+Example values are Java heap limits, not guarantees of total RAM use or
+recommended minimums for every software. Start with a test server and
+monitor it as load increases.
+
+
+9. CONSOLE COMMANDS AND LOGS
+----------------------------
+
+The stdout/stderr logs from the proxy, lobby, and active extra servers are
+shown in the launcher console. The proxy process does not receive console
+commands.
+
+An unprefixed command is sent to every active game server, including the
+lobby:
+  say Maintenance is starting
+  save-all
+
+To send a command to only one server:
+  psw <server-name> <command>
+
+Examples:
+  psw skyblock say Message for Skyblock players
+  psw lobby list
+  psw survival save-all
+
+The server name must match the name used in plugin-servers. If the name or
+command is missing after "psw", the launcher prints usage information. An
+unknown name produces a list of the available extra server names.
+
+Important: an unprefixed shutdown command such as "stop" is sent to the
+lobby and every extra game server. Use psw <name> stop to stop only one
+server. If any backend stops, the launcher stops the other backends and the
+proxy as well. If the proxy stops, all backends are stopped.
+
+
+10. NETWORK AND ACCESS
+----------------------
+
+Players should connect only to the proxy.bind address and proxy port.
+Backends bind to 127.0.0.1 and are accessed by the proxy; do not expose
+backend ports as public player ports.
+
+If the hosting panel/Docker assigns public ports separately, set the
+proxy.bind port to the port assigned by the panel and publish that port for
+player access. Ensure backend ports are reachable by the proxy on the same
+host/network where the launcher runs.
+
+If the proxy firewall/hosting port is closed, servers may appear to start in
+the console while players cannot connect. Connect through the proxy address,
+not directly to a backend; forwarding passes player IP/identity information
+from the proxy to the backend.
+
+
+11. CONFIGURATION FILE BEHAVIOR
+-------------------------------
+
+The launcher creates proxy and backend configuration files. It adds/updates
+enabled game server names and addresses in the proxy backend list; addresses
+are updated if ports change. Other existing proxy settings are intended to
+be preserved.
+
+Forwarding settings are created in backend directories for Paper-family and
+Leaf/Leaves software. Velocity uses modern forwarding and a shared secret
+with Paper-based backends. Its mode can be auto, modern, legacy, or none.
+Auto selects legacy for Spigot and modern for a new config; Arclight/Mohist
+are not automatically switched to legacy. Select their mode using
+`proxy.velocity-forwarding-mode` or a valid mode in `velocity.toml`.
+Arclight is configured in `arclight.conf` (`velocity.enable` and, in modern
+mode, the shared secret). Mohist is configured in
+`mohist-config/mohist.yml` (`velocity.enabled`, `velocity.onlineMode`, and
+`velocity.secret`). Paper 1.19.4 and newer use `config/paper-global.yml`;
+Paper 1.19.4 and newer use `config/paper-global.yml`; older versions use
+`paper.yml` under `settings.velocity-support`. The launcher updates only the
+forwarding values and keeps the Velocity secret in sync. Set
+`lobby.minecraft-version` or `plugin.<name>.minecraft-version` if the version
+cannot be detected from the server JAR or existing Paper config.
+
+For Fabric, Forge, and NeoForge behind Velocity, the launcher selects an exact
+release compatible with the backend's Minecraft version and loader, downloads
+it from Modrinth over HTTPS, verifies SHA-512, and installs it in
+run/<name>/mods/. Fabric also receives its required Fabric API dependency.
+NeoForge prefers NeoVelocity and falls back to Proxy Compatible Forge if
+NeoVelocity has no release for the exact version. The same generated Velocity
+secret is written to the upstream config file: FabricProxy-Lite uses
+config/FabricProxy-Lite.toml, NeoVelocity uses config/neovelocity-common.toml,
+and Proxy Compatible Forge uses config/proxy-compatible-forge.toml. The
+Fabric config is not named config.yml.
+
+Automatic installation only works for versions actually published by each
+mod. The launcher does not claim that every Minecraft version from 1.8 to
+26.3 has a compatible forwarding mod; for example, current Modrinth metadata
+does not provide FabricProxy-Lite for 1.8 or NeoVelocity/Proxy Compatible
+Forge for 26.3. If the exact release is unavailable, or the Minecraft version
+cannot be determined, startup stops with an actionable error. Older Forge
+versions that require a modified Velocity proxy are also rejected.
+For an already installed Forge/NeoForge backend, the launcher derives the
+exact Minecraft version from its installed server library and rejects a
+conflicting `minecraft-version` setting rather than selecting the wrong mod.
+NeoVelocity's embedded NeoForge dependency range is also checked; if Modrinth
+tags claim compatibility but the mod metadata excludes the installed version,
+the launcher tries Proxy Compatible Forge instead.
+
+Fabric/Forge/NeoForge automatic forwarding requires Velocity modern mode and
+is not implemented for BungeeCord/Waterfall. Arclight/Mohist may use any
+Velocity forwarding mode when the selected hybrid build supports it; the
+launcher configures their native forwarding settings and shared secret.
+BungeeCord and Waterfall use Bungee forwarding for supported Bukkit-style
+backends.
+
+Forge/NeoForge installer runs are checked for libraries referenced by the
+generated launch profile. If an installer was configured and the profile has
+missing libraries, the launcher reruns the installer to repair the
+installation. You can also set lobby.libs or plugin.<name>.libs to a ZIP
+containing the exact build's libraries; it is extracted only into that
+backend's libraries/ directory, then checked again. Use an archive from the
+same Forge/NeoForge build and Minecraft version. Remaining missing files are
+reported before the server starts. Corrupt JARs in the archive and invalid
+JAR dependencies referenced by the profile are also reported before launch.
+NeoForge profile validation does not mistake Java module options such as
+`--add-opens` for library paths and checks comma-separated legacy classpath
+entries against the installed libraries.
+Legacy Forge versions such as 1.16.4 must be installed with their matching
+server installer; the launcher uses the generated Forge JAR in the server
+run directory and does not treat a similarly named file under `libraries/`
+as the server executable. Modern Forge uses its generated argument profile
+(`unix_args.txt` on Linux/macOS, `win_args.txt` on Windows). Windows batch
+tokens such as `%*` and `pause` are not Java launch arguments.
+With `launch-args=auto`, relative launch paths resolve from `run/<name>/`.
+The launcher prints both the selected arguments and working directory before
+starting the backend. Forge may still load dependencies from `libraries/`.
+
+The launcher validates forwarding settings. Manually changing launcher-
+managed settings may cause startup validation to fail. Back up files before
+deleting configuration; inspect manually changed files and ensure the proxy
+and all backends use matching forwarding modes.
+
+
+12. COMMON ISSUES
+-----------------
+
+"A server jar path is missing" or "Setup files ... Add ... jars"
+  Check proxy.jar/lobby.jar or plugin.<name>.jar in hybrid.properties.
+  Confirm the JAR exists at that path. Example: server-libs/paper.jar.
+
+"requires a Java runtime" or Java version errors
+  Verify that the Java starting the launcher is 25+, and that
+  proxy.java/lobby.java/plugin.<name>.java run and are compatible with the
+  selected software. Older Forge/Minecraft versions may require an older
+  backend Java runtime.
+
+"You need to run the installer" or missing Forge libraries
+  Check that the Forge installer JAR is configured as lobby.jar or
+  plugin.<name>.jar and launch-args is auto. The updated launcher should run
+  the installer with --installServer and select the generated launch profile.
+  If installation fails, inspect the installer output. The current launcher
+  should report missing libraries before startup or print a repair attempt.
+  Before "Starting Forge", look for "Using automatic Forge launch profile" or
+  "Repairing incomplete Forge". If only a bootstrap/server JAR is configured,
+  use the full server installer as lobby.jar/plugin.<name>.jar.
+
+"Review Mojang's EULA..."
+  Read the EULA and, if you accept it, set eula=true in the relevant enabled
+  backend's run/<name>/eula.txt. The lobby's name is lobby.
+
+"Address already in use", "Failed to bind to port"
+  Check that the proxy, lobby, and every extra server use different ports.
+  Review proxy.bind, lobby.port, and plugin.<name>.port. Another process on
+  the host may already be using the same port.
+
+Lobby/game server port opens but players cannot connect
+  Confirm players are connecting to the proxy port, that the proxy's public
+  port is assigned by the panel, and that proxy logs show a successful
+  backend connection. Keep backends behind the proxy, not on public IPs.
+
+"Out of memory", container OOM, or memory usage is very high
+  Check the number of JVMs running, proxy.memory/lobby.memory, and each
+  plugin.<name>.memory. Xmx values do not guarantee total resource use;
+  monitor the host graph and reduce server count or heap limits based on
+  actual workload. Do not use Xmx below 256M; the launcher starts with
+  -Xms256M.
+
+PSW command reports an unknown server
+  Confirm the name is enabled in plugin-servers, spelling matches, and the
+  launcher was restarted to read the new settings.
+
+Proxy config does not contain a backend
+  Confirm the name is in plugin-servers. Restart the launcher and check the
+  backend address in run/proxy/velocity.toml or run/proxy/config.yml.
+
+
+13. UPDATES AND BACKUPS
+-----------------------
+
+Back up config/, run/, and world directories before updating the launcher
+JAR. Put updated server software JARs in server-libs/ and change the
+corresponding *.jar setting; test version changes on a copy of the world.
+Check compatibility between plugins, proxy, server software, and Minecraft
+protocol/version separately.
+
+The launcher does not automatically update server JARs. Downgrading
+Minecraft versions or switching to a different build without a world backup
+may cause data loss.
+
+
+14. BUILDING FROM SOURCE
+-----------------------
+
+To build the launcher JAR from source, use a machine with JDK 25 and Maven
+3.9 or newer, then run this in the project directory:
+
+  mvn clean package
+
+Output:
+
+  target/server.jar
+
+Upload this JAR to the host; the host does not need the source code or Maven.
+
+
+15. QUICK CHECKLIST
+-------------------
+
+[ ] The host is running Java 25 or newer.
+[ ] Proxy/backend JARs exist at configured paths, or required custom launch
+    profile files are present for a server configured with jar=none.
+[ ] If an EULA applies, each enabled backend has eula=true in its EULA file.
+[ ] Only the extra servers you intend to run are listed in plugin-servers.
+[ ] The proxy and every backend use a different, unused port.
+[ ] proxy.bind matches the public port assigned by the hosting panel.
+[ ] Each server memory value fits within the host's total RAM capacity.
+[ ] Players connect to the proxy address; backend ports are not public.
+[ ] Upstream sources confirm plugin/server compatibility with the chosen
+    Java and Minecraft versions.
+[ ] World and configuration backups are available.
+
+This guide describes the current launcher behavior. Java, Minecraft, and
+plugin compatibility depends on the version/build requirements published by
+the relevant upstream projects.

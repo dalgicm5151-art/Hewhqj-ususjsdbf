@@ -1,0 +1,673 @@
+HYBRID SERVER LAUNCHER - DETAYLI KULLANIM KILAVUZU
+===================================================
+
+Bu dosya; launcher'i kurma, Java 25 gereksinimi, proxy ve lobby ayarlari,
+istege bagli coklu game/plugin server (PSW) kurulumu, RAM/port ayarlari,
+komut kullanimi ve sik karsilasilan sorunlari anlatir.
+
+
+1. LAUNCHER NE YAPAR?
+---------------------
+
+Launcher tek bir proxy'yi ve en az bir arka uc (backend) oyun sunucusunu
+baslatir. Ilk kurulumda yalnizca proxy ve lobby etkin olur. Ek oyun/plugin
+sunuculari varsayilan olarak acilmaz; hybrid.properties dosyasinda
+plugin-servers listesine isim ekleyince etkinlesir.
+
+Desteklenen proxy turleri:
+  - Velocity
+  - BungeeCord
+  - Waterfall
+
+Desteklenen lobby ve ek oyun sunucusu turleri:
+  - Paper
+  - Purpur
+  - Spigot
+  - Folia
+  - Pufferfish
+  - Leaf
+  - Leaves
+  - Fabric
+  - Forge
+  - NeoForge
+  - Arclight
+  - Mohist
+  - Limbo (bagimsiz TCP backend olarak)
+
+Her backend sunucu ayni turden veya farkli turlerden olabilir. Ornegin lobby
+Paper, skyblock Paper ve survival Folia olabilir. Her backend kendi JVM
+sureginde, kendi run/<sunucu-adi>/ klasorunde acilir.
+
+Launcher sunucu yazilimlarini kendisi indirmez. Gerekli proxy ve oyun sunucusu
+JAR dosyalarini operator server-libs/ klasorune koyar ve yolunu ayarlar.
+Launcher proxy/backend temel baglanti ayarlarini olusturur; eklentilerin
+oyunculari sunucular arasinda tasimasi, izinleri, oyun modlari ve diger oyun
+mantigi ayrica ilgili proxy eklentisi veya sunucu plugin'i ile yapilandirilir.
+
+
+2. JAVA 25 GEREKSINIMI VE SURUM UYUMLULUGU
+-----------------------------------------
+
+Launcher Java 25 ile derlenmistir. Launcher'i calistiracak host/container
+Java 25 veya daha yeni bir Java runtime saglamalidir. Proxy ve backend
+sureclerinin Java komutu ayri ayarlanabilir; launcher komutun calistigini ve
+Java 8 veya daha yeni oldugunu kontrol eder. Sunucu yaziliminin tam surumu
+daha eski veya daha yeni bir Java isteyebilir; her proses icin uyumlu Java
+kurulumunu proxy.java, lobby.java veya plugin.<ad>.java ile secin.
+
+Java 25 runtime kurulumu:
+  1. Host panelinde veya isletim sisteminde Java 25 runtime/JDK secin ya da
+     kurun. Hosting panelinde Java surumu seciliyorsa Java 25'i secin.
+  2. Terminalde su komutu calistirin:
+       java -version
+  3. Ciktida 25 veya daha yuksek ana surum gorunmelidir.
+  4. Panelin baslatma komutu launcher dosyasi icin su sekilde olmali:
+       java -jar server.jar
+
+Launcher'i kaynak koddan yeniden derlemek icin JDK 25 ve Maven 3.9 veya ustu
+gerekir. Hazir server.jar dosyasini calistirmak icin hostta Maven gerekmez.
+Host JDK'si ile proxy/backend Java'si ayni olmak zorunda degildir; her surec
+icin proxy.java, lobby.java veya plugin.<ad>.java ayri bir Java executable
+yolu belirtebilir. Ornegin, Java 25 ile acilan launcher eski Forge sunucusunu
+Java 8 runtime'i ile baslatabilir.
+
+Backend otomatik Java fallback:
+  Launcher once lobby/plugin sunucusunu ayarli Java ile baslatir. Sunucu
+  listener acilmadan kapanir ve cikti bilinen Java uyumsuzluk imzalarindan
+  birini icerirse (Paper'in desteklenen maksimum Java mesaji, "Unsupported
+  class file major version" veya eski Forge sun.security.util erisim hatasi),
+  uygun Eclipse Temurin JRE'yi HTTPS ile indirir, resmi SHA-256 checksum'ini
+  dogrular ve runtimes/ altinda saklayip bir kez yeniden dener.
+  Java 25 bytecode uyumsuzlugu Java 21'i, Paper "up to Java 15" mesaji Java
+  11'i secer. Eski Forge ModLauncher'in ManifestEntryVerifier metot imzasi
+  hatasinda Java 8/11/17 icin ayni ana surumun bilinen eski patch'i
+  (8u312/11.0.13/17.0.1) secilir. Modul erisim hatasinda veya diger Java
+  surumlerinde bu Forge hatasi gorulurse Java 8u312 secilir. Bunlar yalnizca
+  taninan hata imzalari icin uyumluluk kurallaridir; her Java patch sorununu
+  otomatik cozecegi garanti edilmez. Diger crash'ler indirme veya yeniden
+  deneme baslatmaz. Proxy ve installer baslatma hatalari bu fallback
+  kapsaminda degildir. Indirilen JRE sistem PATH/JAVA_HOME ayarlarini degistirmez.
+
+Minecraft/sunucu surumu konusunda onemli:
+  - Launcher tarafinda 1.8 ile 26.3 arasindaki Minecraft sunucu
+    surumlerinden biri secilebilir. Bu, araliktaki her build'in test
+    edildigi veya uyumlu oldugu anlamina gelmez.
+  - Launcher Minecraft surumunu indirmez, sinirlamaz veya JAR icinden
+    uyumlulugunu dogrulamaz. Secilen JAR operatorun server-libs icine
+    koydugu build'dir.
+  - "JDK 25 ile launcher calisiyor" demek, bu araliktaki her Paper/Purpur/
+    Spigot/Folia/Pufferfish/modded/proxy build'inin Java 25 ile kesin
+    calisacagi anlamina gelmez. Her yazilimin secilen tam build icin resmi
+    Java gereksinimini kontrol edin.
+  - Secilen sunucu Java 26 veya daha yenisini istiyorsa Java 25 runtime
+    yeterli olmayabilir. Hostta o Java surumu bulunmali ve ilgili
+    sunucunun .java ayariyla o runtime secilmelidir.
+  - Proxy ve backend ayni Minecraft protokol/surumunu desteklemelidir.
+    Farkli oyun surumlerini oyunculara acmak icin proxy tarafinda uygun
+    uyumluluk eklentisi gerekebilir.
+
+
+3. DOSYA VE KLASOR DUZENI
+-------------------------
+
+Ilk calistirmada launcher, calisma dizininde temel dosya ve klasorleri olusturur:
+
+  server.jar                    Launcher JAR'i (panelin calistirdigi dosya)
+  config/hybrid.properties      Ana ayar dosyasi
+  server-libs/                  Operatorun koydugu proxy/backend JAR'lari
+  run/proxy/                    Proxy config'i, plugin'leri ve calisma dosyalari
+  run/lobby/                    Lobby config'i, plugin'leri ve calisma dosyalari
+  plugins/proxy/                Proxy plugin JAR'lari
+  plugins/lobby/                Lobby plugin JAR'lari
+
+plugin-servers listesine "skyblock" eklendiginde:
+  run/skyblock/                 Skyblock'in ayri config, dunya ve loglari
+  plugins/skyblock/             Skyblock'a kopyalanacak plugin JAR'lari
+
+Her ek sunucuda <ad> yerine hybrid.properties icinde yazilan isim kullanilir.
+Ornek: plugins/survival/ ve run/survival/.
+
+Server JAR dosyalari ilk calistirmada kendi calisma klasorune kopyalanir:
+  Proxy:   run/proxy/proxy.jar
+  Lobby:   run/lobby/server.jar
+  Ek PSW:  run/<ad>/server.jar
+
+Calisma klasorundeki server.properties, dunya, log ve diger olusturulan
+sunucu dosyalarini silmeyin; bunlar sunucunun kalici verileridir.
+
+
+4. ILK KURULUM
+--------------
+
+1. Sunucu dosyalarini hostun calisma klasorune yukleyin. Launcher dosyasinin
+   adi server.jar degilse panelin baslatma komutunu uygun sekilde degistirin.
+2. Proxy JAR'ini ve lobby sunucu dosyasini/installer'ini server-libs/ icine
+   yukleyin. Varsayilan `launch-args=auto`, yazilima gore baslatma profilini
+   secer. Forge/NeoForge server installer JAR'i verildiyse launcher
+   `--installServer` adimini calistirir; kurulum dosyalari ilgili run/<ad>/
+   klasorunde olustuktan sonra uygun profil otomatik secilir.
+3. Ilk defa java -jar server.jar ile calistirin. Launcher config/hybrid.properties,
+   run/proxy, run/lobby ve lobby EULA dosyasini olusturur. JAR dosyalari
+   eksikse launcher beklenen dosya yollarini loglar ve durur.
+4. config/hybrid.properties ayarlarini kontrol edin.
+5. Mojang EULA'sini okuyup kabul ediyorsaniz run/lobby/eula.txt icinde
+   eula=false satirini eula=true yapin.
+6. Yeniden baslatin. Lobby/proxy config'i hazirlanir, JAR'lar kopyalanir ve
+   once lobby, sonra proxy baslatilir.
+
+Launcher EULA'yi sizin yerinize kabul etmez. Her etkin vanilla/modded game
+server icin ayri EULA dosyasi gerekir; ek sunucu ekleyince once bir defa
+baslatip run/<ad>/eula.txt dosyasini da kabul etmeniz gerekir. Limbo turu
+EULA kontrolunu atlar.
+
+
+5. HYBRID.PROPERTIES - PROXY VE LOBBY
+------------------------------------
+
+Ilk acilista olusturulan temel ayarlara ornek:
+
+  proxy.type=velocity
+  proxy.jar=server-libs/velocity.jar
+  proxy.bind=0.0.0.0:25565
+  proxy.memory=1G
+  proxy.java=java
+  proxy.online-mode=true
+
+  lobby.type=paper
+  lobby.jar=server-libs/paper.jar
+  lobby.port=25566
+  lobby.memory=4G
+  lobby.java=java
+  lobby.launch-args=auto
+
+  plugin-servers=
+
+Alanlar:
+
+proxy.type
+  velocity, bungeecord veya waterfall.
+
+proxy.jar
+  server-libs/ altindaki proxy JAR yoludur. Ornek:
+  server-libs/velocity.jar
+
+proxy.bind
+  Oyuncularin baglanacagi proxy IP/port adresi. Genellikle
+  0.0.0.0:25565 kullanilir. Hosting panelinde ayrilan public port ile ayni
+  olmalidir.
+
+proxy.memory
+  Proxy JVM icin maksimum heap (Xmx) degeridir. Ornek: 512M, 1G.
+
+proxy.java
+  Proxy icin Java executable komutu/yolu. Ornek: java.
+
+proxy.online-mode
+  Minecraft hesap dogrulama ayari. Varsayilan true'dur. Proxy ve forwarding
+  ayarlariyla tutarli olmalidir.
+
+proxy.velocity-forwarding-mode
+  Velocity icin auto, modern, legacy veya none. auto; Fabric/Forge/NeoForge
+  varsa modern, Spigot varsa legacy secer; diger durumlarda mevcut
+  velocity.toml modunu korur, yeni config'te modern kullanir. Arclight ve
+  Mohist otomatik olarak legacy moda alinmaz; modu bu ayardan veya gecerli
+  velocity.toml degerinden secin. Diger Velocity TOML ayarlari korunur.
+  Legacy modda run/lobby/spigot.yml icindeki settings.bungeecord true olur
+  ve Arclight/Mohist'in native Velocity forwarding'i kapatilir. Modern
+  modda Arclight arclight.conf icinde; Mohist ise
+  mohist-config/mohist.yml icinde velocity.enabled, velocity.onlineMode ve
+  velocity.secret ayarlariyla yapilandirilir ve ortak secret eslestirilir.
+
+lobby.type
+  Desteklenen backend turlerinden biri: paper, purpur, spigot, folia,
+  pufferfish, leaf, leaves, fabric, forge, neoforge, arclight, mohist veya
+  limbo.
+
+lobby.jar
+  Lobby JAR dosyasinin server-libs/ altindaki yolu.
+
+lobby.port
+  Lobby'nin proxy arkasinda kullanacagi dahili port. Lobby 127.0.0.1'e
+  baglanir. Bu port oyunculara public olarak acilmaz.
+
+lobby.minecraft-version
+  Velocity arkasindaki Fabric/Forge/NeoForge lobby icin otomatik forwarding
+  modu seciminde kullanilan tam Minecraft surumudur. Launcher JAR adi veya
+  metadata'dan bulmaya calisir; bulamazsa bu degeri elle girin.
+
+lobby.libs
+  Istege bagli Forge/NeoForge libraries ZIP arsivi. Installer library
+  dosyalarini olusturamazsa veya eksik dosya kalirsa arsiv run/lobby/libraries/
+  altina cikarilir. Arsiv ilgili Forge/NeoForge ve Minecraft surumuyle tam
+  eslesmelidir. ZIP icinde `libraries/...` yollari veya dogrudan Maven
+  library yollari bulunabilir. Arsivdeki JAR dosyalari gecerli ZIP/JAR
+  yapisinda olmali; bozuk veya eksik JAR baslatmadan once hata olarak
+  bildirilir. Ornek: lobby.libs=libs/forge-1.21.1-libraries.zip
+
+lobby.memory
+  Lobby JVM'nin maksimum heap degeridir.
+
+lobby.java
+  Lobby icin kurulu Java executable komutu/yolu. `java` PATH icindeyse
+  kullanilabilir; aksi halde hostun sagladigi gercek executable yolunu yazin.
+  Ornek amacli bir yol degerini oldugu gibi kopyalamayin. Host yalnizca Java 25
+  sagliyorsa Java 8 gerektiren eski Forge lobby icin hosttan Java 8 runtime
+  secenegi/yolu istemeniz gerekir.
+
+lobby.launch-args
+  Lobby JVM'sine Java bellek seceneklerinden sonra verilecek argumanlardir.
+  Varsayilan `auto` degeridir. Standart sunucu JAR'i, Fabric server launcher'i
+  veya Forge/NeoForge tarafindan olusturulan args dosyalari otomatik secilir.
+  Forge/NeoForge installer JAR'i secilmisse ve kurulum profili yoksa launcher
+  installer'i `--installServer` ile bir kez calistirir. Baslatmadan once
+  otomatik secilen profil konsola yazilir. Argumanlari elle vermek de
+  mumkundur; shell komutu olarak calistirilmaz, Java'ya aktarilir.
+
+Config dosyasi Properties bicimindedir: anahtar=deger. Ayni anahtari birden
+fazla kez yazmayin; tek satirdaki son degerin kullanilacagina guvenmeyin.
+Degisiklikten sonra launcher'i yeniden baslatin.
+
+
+6. COKLU PLUGIN/GAME SERVER (PSW) EKLEME
+---------------------------------------
+
+PSW ek sunucu demektir. Ek sunucular istege baglidir; plugin-servers bos
+birakilirsa yalnizca lobby ve proxy calisir.
+
+Ornek: lobby 25567, skyblock 25568, survival 25569:
+
+  lobby.port=25567
+  plugin-servers=skyblock,survival
+
+  plugin.skyblock.type=paper
+  plugin.skyblock.jar=server-libs/skyblock-paper.jar
+  plugin.skyblock.port=25568
+  plugin.skyblock.memory=700M
+  plugin.skyblock.java=java
+
+  plugin.survival.type=folia
+  plugin.survival.jar=server-libs/survival-folia.jar
+  plugin.survival.port=25569
+  plugin.survival.memory=700M
+  plugin.survival.java=java
+
+Her ek sunucu icin:
+  plugin-servers
+    Etkin sunucularin virgulle ayrilmis adlari. Ornek:
+    plugin-servers=skyblock,survival
+
+  plugin.<ad>.type
+    paper, purpur, spigot, folia, pufferfish, leaf, leaves, fabric, forge,
+    neoforge, arclight, mohist veya limbo.
+
+  plugin.<ad>.jar
+    Sunucunun server-libs/ altindaki JAR yolu. Ayarlanmazsa varsayilan:
+    server-libs/<ad>.jar
+
+  plugin.<ad>.port
+    Istege bagli backend portu. Ayarlanmazsa lobby portunun bir ustunden
+    baslayarak sirayla verilir. Lobby 25567 ise ilk ek sunucu 25568 olur.
+    Sonraki ek sunucu bir onceki sunucu portunun bir ustunu alir.
+
+  plugin.<ad>.memory
+    Sunucu JVM'si icin maksimum heap degeri. Ayarlanmazsa 2G kullanilir.
+
+  plugin.<ad>.java
+    O sunucu icin Java executable. Ayarlanmazsa lobby.java degeri kullanilir.
+
+  plugin.<ad>.launch-args
+    Sunucunun Java baslatma argumanlari. Varsayilan `auto`: secilen yazilima
+    gore kurulu server profili otomatik bulunur. Forge/NeoForge installer
+    JAR'i verilirse kurulum denenir; sonrasinda args dosyasi otomatik secilir.
+    Gerekirse bu degeri elle verin.
+
+  plugin.<ad>.minecraft-version
+    Velocity arkasindaki Fabric/Forge/NeoForge backend icin forwarding modu
+    secilecek tam Minecraft surumudur. Launcher JAR'dan algilayamiyorsa
+    burada belirtin.
+
+  plugin.<ad>.libs
+    Istege bagli, ilgili backend surumuyle eslesen Forge/NeoForge
+    libraries ZIP arsivinin yolu. Arsiv ilgili run/<ad>/libraries/ altina
+    cikarilir. Ornek: plugin.forge.libs=libs/forge-1.21.1-libraries.zip
+
+`lobby.jar=none` veya `plugin.<ad>.jar=none` kullanilabilir. Bu durumda
+launcher ilgili `run/<ad>/` klasorundeki mevcut baslatma profilini otomatik
+arar; kurulum dosyalarinin onceden hazir olmasi gerekir.
+
+Adlar kucuk harf, rakam, tire (-) ve alt cizgi (_) icerebilir; lobby ve proxy
+isimleri ek sunucu adi olarak kullanilamaz. Ayni isim veya ayni port birden
+fazla kez kullanilamaz. Her backend portu proxy portundan da farkli olmalidir.
+
+Istenen adlari plugin-servers listesine ekleyin, her ad icin server-libs
+altina ilgili JAR'i koyun (veya custom launch profile kullanin) ve ayarlari
+ekleyin. Ardindan launcher'i baslatin. Yeni sunucunun run/<ad>/ dizini ve
+Limbo disindaki turler icin EULA dosyasi olusur. EULA gerekiyorsa kabul edip
+yeniden baslatin.
+
+Proxy arka uc kayitlari baslangicta olusturulur/guncellenir:
+  Velocity:  run/proxy/velocity.toml
+  BungeeCord/Waterfall: run/proxy/config.yml
+
+Launcher backend isimlerini bu config'lere ekler. Proxy'nin varsayilan
+oyuncu giris noktasi lobby'dir. Oyunculari skyblock/survival'a tasimak icin
+proxy'nin sunucu degistirme komutlarini/izinlerini veya uygun bir proxy
+eklenti/portal sistemini ayarlayin. Launcher tek basina oyuncu dagitimi,
+queue veya otomatik oyun modu secimi yapmaz.
+
+Fabric/Forge/NeoForge gibi modded backend'lerde oyuncu bilgisi forwarding'i
+icin uyumlu forwarding mod/plugin'i kurup proxy modu ile eslestirmeniz
+gerekir. Launcher modded forwarding modunu indirmez veya ayarlamaz.
+Leaf/Leaves Paper tabanli config ayarlari alir. Arclight ve Mohist icin
+native forwarding ayarlari ve Spigot uyumlu Bungee toggle'i yapilandirilir.
+
+Limbo burada bagimsiz TCP backend olarak baslatilir. LOOHP Limbo icin launcher
+`run/<ad>/server.properties` dosyasinda `server-ip=127.0.0.1` ve atanan
+`server-port` degerlerini ayarlar. BungeeCord/Waterfall veya Velocity legacy
+modunda `bungeecord=true` olur. Velocity modern modunda bunun yerine
+`velocity-modern=true` ve ortak secret icin `forwarding-secrets` ayarlanir;
+Velocity none modunda iki forwarding secenegi de kapatilir.
+`bungee-guard`, bu modlarla karsilikli uyumsuz oldugu icin kapali tutulur.
+Diger Limbo ayarlari korunur. Limbo bir proxy plugin'i ise
+`plugins/proxy/` icine koyun; `type=limbo` secmeyin.
+
+
+7. PLUGIN YUKLEME
+-----------------
+
+Proxy plugin'leri:
+  plugins/proxy/*.jar
+  Baslangicta run/proxy/plugins/ klasorune kopyalanir.
+
+Lobby plugin'leri:
+  plugins/lobby/*.jar
+  Baslangicta run/lobby/plugins/ klasorune kopyalanir.
+
+Ek sunucu plugin'leri:
+  plugins/<ad>/*.jar
+  Baslangicta run/<ad>/plugins/ klasorune kopyalanir.
+
+Yalnizca ilgili proxy/server yazilimi ve Minecraft surumuyle uyumlu plugin
+surumlerini kullanin. Launcher plugin indirmez veya plugin uyumlulugunu
+denetlemez. Ayni plugin JAR'ini proxy ile Paper backend'e birlikte koymak,
+plugin bunu acikca desteklemiyorsa dogru olmayabilir.
+
+
+8. RAM VE BELLEK PLANLAMASI
+---------------------------
+
+Her proxy/backend ayri bir Java prosesi/JVM olarak calisir. hybrid.properties
+icindeki memory ayari ilgili JVM'nin maksimum Java heap (Xmx) siniridir.
+Ornek lobby.memory=1G, lobby icin Xmx1G anlamina gelir.
+
+Launcher su anda her proxy ve backend icin sabit -Xms256M ile baslar.
+Bu deger hybrid.properties'ten ayarlanamaz. Bu nedenle memory degerini
+256M'nin altina indirmeyin; Xmx, Xms'den kucuk olursa JVM baslayamaz.
+
+Xmx bellegin tamamini ilk anda ayirmak demek degildir. JVM ihtiyac oldukca
+heap'i buyutur; ancak ayni anda calisan sunucular bellek kullanirken toplam
+kullanim host/container limitini asarsa sistem OOM nedeniyle surecleri
+oldurebilir. Heap disi bellek (native/JIT/thread/buffer), proxy, launcher ve
+isletim sistemi/container kullanimi da RAM tuketir.
+
+Ornek varsayilanlar:
+  Proxy: 1G
+  Lobby: 4G
+  Her ek PSW: 2G
+
+Bunlar 2 GB RAM'li bir host icin uygun varsayimlar degildir. Hepsini etkin
+birakip Xmx'leri toplamak RAM'i otomatik paylastirmaz; launcher host RAM'ini
+olcmez, sunucu basina otomatik limit dagitmaz veya dusuk bellek gorunce PSW
+acilisini ertelemez. Isteginiz kadar sunucu tanimlayabilirsiniz fakat
+gercekte ayni anda calisabilecek sayi, her sunucunun gercek bellek ihtiyaci
+ve host kapasitesiyle sinirlidir.
+
+2.5 GB host icin 10 Paper server'in calisacagini varsaymayin. Her sunucunun
+minimum heap ihtiyaci farklidir; dusuk Xmx ile acilmama, bellek yetersizligi
+veya host tarafindan kapatilma olabilir. Xmx degerlerini gercek test,
+oyuncu/eklenti/yuk miktari ve hosting RAM grafigine gore ayarlayin; hostun
+tam RAM'ini Java heap'lere dagitmayin, diger kullanimlar icin pay birakin.
+
+Ornek degerler Java heap limitidir, garanti edilen toplam RAM kullanimi veya
+her yazilim icin onerilen minimum degildir. Test sunucusunda baslayip yuku
+artirarak izleyin.
+
+
+9. KOMUT VE LOG KULLANIMI
+-------------------------
+
+Proxy, lobby ve aktif ek sunucularin stdout/stderr loglari launcher
+konsolunda gorunur. Proxy sureci konsol komutu almaz.
+
+On eki olmayan komut, tum etkin game server'lara gonderilir (lobby dahil):
+  say Bakim basliyor
+  save-all
+
+Yalniz bir sunucuya komut gondermek icin:
+  psw <sunucu-adi> <komut>
+
+Ornek:
+  psw skyblock say Skyblock oyuncularina mesaj
+  psw lobby list
+  psw survival save-all
+
+Sunucu adi plugin-servers'ta kullanilan adla ayni olmali. "psw" yazip
+komut/ad eksik birakilirsa launcher kullanim bilgisini yazar. Bilinmeyen ad
+girildiginde mevcut ek sunucu adlarini bildirir.
+
+Dikkat: "stop" gibi kapatma komutu on ek olmadan girilirse lobby ve butun ek
+game server'lara gider. Tek sunucuyu durdurmak icin psw <ad> stop yazin.
+Bir backend kapanirsa launcher diger backend'leri ve proxy'yi de kapatir.
+Proxy kapanirsa tum backend'ler durdurulur.
+
+
+10. AG VE ERISIM
+----------------
+
+Oyuncular yalnizca proxy.bind adresi ve proxy portuna baglanmalidir.
+Backend'ler 127.0.0.1'e bind edilir ve proxy tarafindan kullanilir; backend
+portlarini public oyuncu portu olarak acmayin.
+
+Hosting paneli/Docker her dis portu ayrica atiyorsa proxy.bind portunu panelin
+verdigi porta ayarlayin ve bu portu oyuncu erisimi icin yayinlayin. Backend
+portlarinin launcher'in calistigi ayni ag/host icinde proxy tarafindan
+erisilebilir oldugundan emin olun.
+
+Proxy firewall/hosting portu kapaliysa sunucular konsolda acik gorunse de
+oyuncular baglanamaz. Backend'e dogrudan baglanmak yerine proxy adresini
+kullanin; forwarding ayarlari oyuncu IP/kimlik bilgisini proxy'den backend'e
+tasimak icin kullanilir.
+
+
+11. CONFIG DOSYALARININ DAVRANISI
+---------------------------------
+
+Launcher proxy ve backend icin config dosyalari olusturur. Proxy backend
+listesine etkin game server isimlerini ve adreslerini ekler/gunceller;
+port degisikligi sonrasi adresler de guncellenir. Olusturulmus diger proxy
+ayarlarini korumaya calisir.
+
+Paper ailesi ve Leaf/Leaves icin forwarding ayarlari backend klasorunde
+olusturulur. Velocity Paper tabanli yazilimlarla modern forwarding ve
+paylasilan secret kullanir. Velocity forwarding modu auto, modern, legacy
+veya none olabilir. Auto, Spigot icin legacy secer; yeni velocity.toml
+dosyasinda modern kullanir ve mevcut gecerli modu korur. Arclight/Mohist
+otomatik olarak legacy moda alinmaz; modu `proxy.velocity-forwarding-mode`
+veya velocity.toml icinden secin. Launcher velocity.toml forwarding modunu
+eslestirir ve diger TOML ayarlarini korur. Arclight arclight.conf, Mohist
+ise mohist-config/mohist.yml icindeki velocity.enabled, velocity.onlineMode
+ve velocity.secret ayarlariyla yapilandirilir. Modern modda ortak secret
+backend config'ine yazilir.
+Paper 1.19.4 ve sonrasinda ayarlar config/paper-global.yml dosyasina,
+daha eski surumlerde paper.yml icindeki settings.velocity-support bolumune
+yazilir. Launcher yalnizca forwarding degerlerini gunceller ve Velocity
+secret'ini eslestirir; diger Paper ayarlari korunur. Sunucu surumu JAR'dan
+ve mevcut config'ten anlasilamiyorsa lobby.minecraft-version veya
+plugin.<ad>.minecraft-version ayarlanmalidir.
+
+Velocity arkasindaki Fabric, Forge ve NeoForge backend'ler icin launcher,
+Minecraft surumu ve loader ile tam uyumlu forwarding modunu Modrinth'ten
+HTTPS uzerinden indirir, SHA-512 hash'ini dogrular ve run/<ad>/mods/ klasorune
+kurar. Fabric icin gerekli Fabric API de kurulur. Velocity secret'i resmi
+mod config dosyasina yazilir:
+  Fabric:    config/FabricProxy-Lite.toml
+  NeoForge:  NeoVelocity varsa config/neovelocity-common.toml;
+             uyumlu release yoksa config/proxy-compatible-forge.toml
+  Forge:     config/proxy-compatible-forge.toml
+Fabric modunun config'i genel config.yml degildir.
+
+Otomatik kurulum yalnizca ilgili modun yayinladigi tam Minecraft surumlerini
+destekler; launcher'in 1.8-26.3 genel araligi her loader modunun tum surumleri
+destekledigi anlamina gelmez. Ornegin mevcut Modrinth metadata'sinda Fabric
+1.8 icin FabricProxy-Lite, NeoForge 26.3 icin NeoVelocity ve Forge 26.3 icin
+Proxy Compatible Forge surumu bulunmuyor. Minecraft surumu algilanamazsa
+veya tam uyumlu mod surumu yoksa launcher acik hata vererek durur. Standart
+Velocity ile calismasi mumkun olmayan, degistirilmis Velocity gerektiren eski
+Forge surumleri de otomatik kurulumda reddedilir.
+Kurulu Forge/NeoForge sunucusunda launcher tam Minecraft surumunu server
+library dizininden algilar; `minecraft-version` ayari kurulu surumle
+celisiyorsa yanlis forwarding modu indirmemek icin acik hata verir.
+NeoVelocity icin Modrinth surum etiketine ek olarak modun kendi NeoForge
+dependency araligi da kontrol edilir; metadata kurulu surumu disliyorsa
+launcher Proxy Compatible Forge alternatifini dener.
+
+Forge/NeoForge installer'i daha once calismis ama launch profilinin
+referans verdigi library JAR'lari eksikse launcher installer'i tekrar
+calistirip kurulumu onarmayi dener. Onarim tamamlanmazsa eksik dosyalarin
+yollarini hata mesajinda listeler. Isterseniz `lobby.libs` veya
+`plugin.<ad>.libs` ile surume uygun libraries ZIP arsivi verebilirsiniz;
+launcher bu arsivi ilgili sunucunun libraries/ klasorune cikarir ve eksik
+dosyalari tekrar kontrol eder. ZIP arşivi ayni Forge build'iyle uyumlu
+olmali; baska surumun libraries klasorunu kullanmayin.
+Arsivdeki bozuk JAR dosyalari ve profilin referans verdigi bozuk JAR
+bagimliliklari, sunucu baslatilmadan once hata olarak bildirilir.
+NeoForge arg dosyalarindaki `--add-opens` gibi Java modul secenekleri library
+yolu sanilmaz; virgulle ayrilmis eski classpath girdileri kurulu libraries
+icinde dosya adiyla kontrol edilir.
+Forge 1.16.4 gibi eski surumlerde eslesen server installer'i kullanin:
+launcher'in calistirdigi Forge JAR'i installer tarafindan sunucunun kok
+klasorune olusturulur; `libraries/` altindaki benzer isimli JAR sunucu
+baslatilabilir dosyasi olarak secilmez. Yeni Forge surumlerinde Linux/macOS
+`unix_args.txt`, Windows `win_args.txt` profili kullanilir. `%*` ve `pause`
+Windows `.bat` betigine aittir, Java argumani degildir.
+`launch-args=auto` ile goreli yollar ilgili `run/<ad>/` calisma klasorune gore
+cozulur; launcher secilen argumanlarla calisma klasorunu de baslangicta yazar.
+Forge'un calisma sirasinda `libraries/` klasorunden bagimlilik yuklemesi ise
+normaldir.
+
+Fabric/Forge/NeoForge forwarding Velocity modern mode gerektirir ve
+BungeeCord/Waterfall ile otomatik kurulmaz. Arclight/Mohist backend'lerde
+Velocity modern, legacy veya none modu secilebilir; launcher native config
+ve ortak secret ayarlarini yapilandirip dogrular.
+
+Launcher forwarding ayarlarini dogrular. Launcher tarafindan olusturulmus
+ayarlar sonradan elle degistirilirse baslangic dogrulamasi hata verebilir.
+Yedek almadan config dosyalarini silmeyin; elle degistirilen dosyalari
+inceleyip proxy ile butun backend forwarding ayarlarinin ayni modda oldugunu
+kontrol edin.
+
+
+12. SIK KARSILASILAN SORUNLAR
+-----------------------------
+
+"A server jar path is missing" veya "Setup files ... Add ... jars"
+  hybrid.properties icindeki proxy.jar/lobby.jar veya plugin.<ad>.jar
+  yolunu kontrol edin. JAR dosyasinin gercekten o konumda bulundugunu
+  dogrulayin. Ornek: server-libs/paper.jar.
+
+"requires a Java runtime" veya Java version hatasi
+  Launcher'i baslatan Java'nin 25+ oldugunu; proxy.java/lobby.java/
+  plugin.<ad>.java komutlarinin calistigini ve ilgili yazilim surumune uygun
+  oldugunu kontrol edin. Eski Forge/Minecraft surumleri Java 25 yerine daha
+  eski bir backend Java'si gerektirebilir.
+
+"You need to run the installer" veya Forge libraries missing
+  Forge installer JAR'inin lobby.jar/plugin.<ad>.jar olarak ayarlandigini ve
+  argumanin auto oldugunu kontrol edin. Yeni launcher Forge installer'ini
+  --installServer ile calistirip olusan launch profilini secmelidir. Installer
+  calismadiysa ciktiyi inceleyin. Guncel launcher eksik kutuphaneleri
+  baslatmadan once raporlamali veya installer'i onarmayi denemelidir.
+  `Starting Forge` satirindan once `Using automatic Forge launch profile`
+  veya `Repairing incomplete Forge` mesaji gorunmelidir. Yalnizca shim/server
+  JAR'i varsa tam installer dosyasini lobby.jar olarak secin.
+
+"Review Mojang's EULA..."
+  EULA'yi okuyup kabul ediyorsaniz ilgili etkin backend'in
+  run/<ad>/eula.txt dosyasinda eula=true yapin. Lobby icin ad lobby'dir.
+
+"Address already in use", "Failed to bind to port"
+  Proxy, lobby ve her ek sunucunun portlarinin farkli oldugunu kontrol edin.
+  proxy.bind, lobby.port ve plugin.<ad>.port degerlerini inceleyin.
+  Hostta baska bir proses ayni portu kullaniyor olabilir.
+
+Lobby/game server portu aciliyor ama oyuncu baglanamiyor
+  Oyuncu adresinin proxy portuna gittigini, proxy'nin dis portunun panelde
+  ayrildigini ve proxy logunda backend baglantisinin basarili oldugunu
+  kontrol edin. Backend'i public IP ile degil proxy arkasinda kullanin.
+
+"Out of memory", container OOM veya RAM yuzdesi cok yuksek
+  Ayni anda calisan JVM sayisini, proxy.memory/lobby.memory ve her
+  plugin.<ad>.memory degerini kontrol edin. Xmx'ler toplam kaynak icin
+  garanti degildir; host grafigini izleyip sunucu sayisini veya heap
+  limitlerini gercek yuk ihtiyacina gore azaltin. 256M altinda Xmx
+  kullanmayin; launcher -Xms256M ile baslar.
+
+PSW komutu bilinmeyen sunucu diyor
+  Sunucu adinin plugin-servers listesinde etkin oldugunu, yazimin ayni
+  oldugunu ve launcher'in yeni ayarlari okuyarak yeniden basladigini kontrol
+  edin.
+
+Proxy config'te backend yok
+  Sunucu adinin plugin-servers listesinde oldugunu kontrol edin. Launcher'i
+  yeniden baslatin ve run/proxy/velocity.toml veya run/proxy/config.yml
+  dosyasinda backend adresine bakin.
+
+
+13. GUNCELLEME VE YEDEK
+-----------------------
+
+Launcher JAR'ini guncellemeden once config/, run/ ve dunya klasorlerinin
+yedegini alin. Yeni sunucu yazilimi JAR'ini server-libs/ icine koyup ilgili
+*.jar ayarini degistirin; surum degisikligini gercek dunya kopyasinda
+deneyin. Pluginlerin, proxy'nin, server yaziliminin ve Minecraft protokolunun
+birbiriyle uyumunu ayrica kontrol edin.
+
+Launcher server JAR'larini otomatik guncellemez. Dunya yedegi olmadan
+Minecraft surumu dusurmek veya farkli bir build'e gecmek veri kaybina yol
+acabilir.
+
+
+14. DERLEME
+-----------
+
+Kaynak koddan launcher JAR'i olusturmak icin JDK 25 ve Maven 3.9+ kurulu
+makinede proje klasorunde:
+
+  mvn clean package
+
+Olusan dosya:
+
+  target/server.jar
+
+Bu JAR'i hosta yukleyin; hostta kaynak kodu veya Maven bulundurmak gerekmez.
+
+
+15. KISA KONTROL LISTESI
+------------------------
+
+[ ] Host Java 25+ ile calisiyor.
+[ ] Proxy ve her backend JAR dosyasi belirtilen server-libs yolunda veya
+    jar=none icin gereken launch profile dosyalari calisma klasorunde.
+[ ] EULA gerekiyorsa her etkin backend'in eula.txt dosyasinda true.
+[ ] Sadece kullanacaginiz ek sunucular plugin-servers listesinde.
+[ ] Her server icin ayri, kullanilmayan port var.
+[ ] proxy.bind hosting panelindeki dis portla ayni.
+[ ] Her sunucu memory degeri hostun toplam RAM kapasitesine gore ayarli.
+[ ] Oyuncular proxy adresine baglaniyor, backend portlari public degil.
+[ ] Plugin ve sunucu surumlerinin secilen Java/Minecraft surumunu destekledigi
+    upstream kaynaklardan kontrol edildi.
+[ ] Dunya ve config yedekleri alindi.
+
+Bu kilavuz mevcut launcher davranisini aciklar. Sunucu yazilimlarinin Java,
+Minecraft ve plugin uyumlulugu ilgili upstream projelerin surum/build
+gereksinimlerine baglidir.

@@ -1,0 +1,116 @@
+HYBRID CORE — JAVA RUNTIME YÖNETİMİ Teknik konuşma özeti ve geliştirme
+notu Tarih: 06.11.2026
+
+AMAÇ Hybrid Core kullanıcıların bilgisayarlarına her Java/JDK sürümünü
+önceden kurmasını gerektirmesin. Gerekli Java çalışma ortamını ihtiyaç
+olduğunda internetten indirip kendi klasöründe yönetsin. Kullanıcı
+açısından tek launcher.jar kullanımı korunsun.
+
+ALINAN TASARIM KARARLARI 1. Java runtime’ları launcher.jar içine
+gömülmeyecek. - Böylece launcher gereksiz yere yüzlerce MB veya GB
+büyümeyecek. - İsteğe bağlı runtime’lar uygulamanın zorunlu boyutuna
+dahil edilmeyecek. 2. Runtime’lar ihtiyaç duyuldukça indirilecek. -
+Kullanılmayan Java sürümleri önceden indirilmesin. - İndirilen
+runtime’lar sonraki çalıştırmalar için saklansın ve aynı sürümü kullanan
+backend’ler ortak kullansın. 3. Runtime’lar işletim sistemine global
+olarak kurulmayacak. - PATH veya JAVA_HOME değiştirmek gerekmiyor. -
+Sistem Java kurulumuna dokunulmayacak. - Hybrid Core, kendi indirdiği
+Java çalıştırılabilir dosyasının tam yolunu kullanacak. 4. Kod
+organizasyonu sade tutulacak. - Kullanıcının tercihi: Ek bir
+Runtime.java sınıfı yeterli olsun. - Runtime indirme, çıkarma, kontrol
+etme, sürüm seçme ve uygun Java yolunu döndürme mantığı Runtime.java
+içinde toplansın. - Launcher.java bu sınıfı çağırıp seçilen Java yoluyla
+sunucuyu başlatsın. - İlk aşamada ayrı RuntimeDownloader.java,
+RuntimeDetector.java gibi çok sayıda dosya açılmasın. 5. Tek
+launcher.jar dağıtımı korunsun. - Runtime.java, derleme sırasında
+launcher.jar içine dahil edilecek. - Kullanıcı yine tek JAR
+çalıştıracak; runtime dosyaları JAR dışında ayrı klasörde tutulacak.
+
+ÖNERİLEN KLASÖR YAPISI HybridCore/ launcher.jar runtimes/ / bin/ java
+veya java.exe server-libs/ run/ proxy/ lobby/ skyblock/
+
+Runtime klasör adları ve iç dizin yapısı indirilen dağıtımın gerçek
+arşiv yapısına göre belirlenmeli; yukarıdaki yapı kavramsaldır.
+
+ÇALIŞMA AKIŞI 1. Hybrid Core başlatılır. 2. Başlatılacak proxy/backend
+yazılımının gerektirdiği Java sürümü belirlenir. 3. Gereksinim
+belirlenmeden eski/yeni Java sürümleri rastgele denenmez. 4. Önce mevcut
+Java 25’in bu sunucu için uygun olup olmadığı kontrol edilir. 5. Uygunsa
+mevcut Java 25 kullanılır. 6. Uygun değilse Hybrid Core kendi runtimes
+klasöründe uyumlu bir runtime arar. 7. Bulunamazsa uygun runtime
+güvenilir bir kaynaktan indirilir. 8. İndirilen arşiv doğrulanır,
+güvenli biçimde çıkarılır ve Java çalıştırılabilir dosyası kontrol
+edilir. 9. Sunucu, seçilen Java’nın tam dosya yolu kullanılarak
+başlatılır. 10. Runtime sonraki kullanımlar için saklanır.
+
+ÖNEMLİ TEKNİK NOTLAR - Java 25 ile launcher’ın çalışıyor olması, her
+Minecraft sunucusunun Java 25 ile çalışacağı anlamına gelmez. Her
+sunucunun gerçek Java gereksinimi belirlenmelidir. - Örnek olarak farklı
+Minecraft nesilleri Java 8, 17, 21 veya daha yeni sürümler isteyebilir.
+Kesin seçim sunucu yazılımının ve Minecraft sürümünün gereksinimlerine
+göre yapılmalıdır. - Yalnızca Java ana sürümüne bakmak yetmez. İşletim
+sistemi, CPU mimarisi (x64/ARM vb.) ve gerekiyorsa işletim sistemi
+sürümü de dikkate alınmalıdır. - Bazı dağıtımlarda JRE/JDK paketleri ve
+arşiv klasör yapıları farklı olabilir. Sunucuyu çalıştırmak için gereken
+bileşenleri sağlayan uygun runtime paketi seçilmelidir. - İndirme
+kaynağı güvenilir olmalı (ör. Eclipse Temurin gibi bir dağıtım). İndirme
+HTTPS üzerinden yapılmalı; mümkünse resmi checksum/imza bilgisi
+doğrulanmalı. En azından SHA-256 bütünlük doğrulaması uygulanmalı. -
+Arşiv çıkarılırken path traversal/Zip Slip gibi risklere karşı girişler
+kontrol edilmeli. - İndirme yarıda kesilirse bozuk runtime
+kullanılmamalı; geçici dosyaya indirip doğrulama başarılı olduktan sonra
+nihai konuma taşımak daha güvenlidir. - Eşzamanlı birden fazla backend
+aynı runtime’ı ilk kez isterse çakışma olmaması için indirme/kurulum
+işlemi kilitlenmeli veya tekilleştirilmelidir. - Kullanılmayan
+runtime’ları silme özelliği ileride eklenebilir; otomatik silme yerine
+kullanıcı onayı veya açık bir ayar daha güvenlidir. - İndirme boyutları
+dağıtım, işletim sistemi ve mimariye göre değişir. Önceki konuşmadaki
+Java başına MB değerleri yalnızca kaba tahminlerdir; sabit veya garanti
+edilmiş boyutlar değildir. - launcher.jar boyutunun yaklaşık 50 KB
+kalması bir hedef/varsayımdır, garanti değildir. Gerçek boyut eklenen
+kodlara ve bağımlılıklara göre ölçülmelidir.
+
+JAVA YOLUYLA SUNUCU BAŞLATMA Java’yı işletim sistemine kurmak yerine
+ProcessBuilder’a runtime’ın tam yolu verilebilir. Kavramsal örnek:
+
+ProcessBuilder builder = new ProcessBuilder( javaExecutablePath,
+“-Xms1G”, “-Xmx4G”, “-jar”, serverJarPath, “nogui” );
+builder.directory(serverDirectory); Process process = builder.start();
+
+Bu örnek doğrudan mevcut projeye kopyalanacak kesin kod değildir; Hybrid
+Core’un mevcut process yönetimi, konsol aktarımı, çalışma dizini ve
+argüman yapısına uyarlanmalıdır.
+
+RUNTIME.JAVA İÇİN BEKLENEN SORUMLULUKLAR - Gerekli Java sürümünü girdi
+olarak almak veya mevcut sunucu algılama mekanizmasından öğrenmek. -
+İşletim sistemi ve mimariyi belirlemek. - Uygun runtime’ın yerel
+klasörde bulunup bulunmadığını kontrol etmek. - Bulunmuyorsa uygun
+paketin resmi indirme adresini ve doğrulama bilgisini belirlemek. -
+İndirmek, doğrulamak ve güvenli biçimde çıkarmak. - Java executable
+dosyasının gerçekten çalıştığını ve sürümünün beklenen sürüm olduğunu
+doğrulamak. - Seçilen Java executable tam yolunu Launcher/ServerManager
+tarafına döndürmek. - Hata durumlarında anlaşılır mesaj vermek; indirme
+başarısızsa yanlış Java ile sessizce devam etmemek.
+
+COPILOT İÇİN UYGULAMA TALİMATI Mevcut Hybrid Core kaynak kodunu ve
+Launcher.java akışını incelemeden varsayımsal bir mimariyi zorla
+uygulama. Önce mevcut sunucu başlatma kodunu, Java 25’in nasıl
+kullanıldığını ve sunucu sürüm/Java gereksiniminin şu anda nasıl
+belirlendiğini tespit et. Sonra mevcut yapıyı bozmadan tek bir
+Runtime.java sınıfı ekle. Launcher.java yalnızca Runtime.java üzerinden
+uygun Java executable yolunu alsın ve mevcut process başlatma
+mekanizmasına bu yolu versin. Var olan proxy/backend yönetimi, konsol
+aktarımı, klasör izolasyonu ve komut yönlendirme davranışlarını
+değiştirme. Gerekli Java sürümü güvenilir biçimde belirlenemiyorsa
+tahmin ederek indirme yapma; önce belirsizliği raporla. Platform,
+mimari, indirme doğrulaması, güvenli arşiv çıkarma ve eşzamanlı indirme
+durumlarını ele al. Değişiklikleri mevcut proje yapısına ve kullandığı
+Java sürümüne uygun şekilde yap; çalıştırılabilir, derlenebilir kod üret
+ve değişen dosyaları açıkça listele.
+
+KISA ÖZET Hybrid Core tek launcher.jar olarak kalacak. Java runtime’ları
+JAR içine gömülmeyecek; gerektiğinde internetten indirilip
+HybridCore/runtimes altında saklanacak. İşletim sistemine global Java
+kurulumu yapılmayacak. Tek ek sınıf Runtime.java olacak; Launcher.java
+bu sınıftan uygun Java executable yolunu alarak her backend’i kendi
+gereksinimine uygun Java ile başlatacak.
